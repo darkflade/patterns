@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:patterns/screens/3lab_screen.dart';
+import 'package:patterns/screens/lab5_7_login_screen.dart';
 import '1lab_screen.dart';
 import '2lab.dart';
+import '4lab_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key, required this.title});
@@ -11,7 +14,7 @@ class HomeScreen extends StatelessWidget {
   final String lab2 = "Лабораторная работа 2";
   final String lab3 = "Лабораторная работа 3";
   final String lab4 = "Лабораторная работа 4";
-  final String lab5 = "Лабораторная работа 5";
+  final String lab57 = "Лабораторная работа 5 и 7";
   final String lab6 = "Лабораторная работа 6";
 
   @override
@@ -45,7 +48,7 @@ class HomeScreen extends StatelessWidget {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => Lab1Screen(title: lab3)),
+                  MaterialPageRoute(builder: (context) => Lab3Screen(title: lab3)),
                 );
               },
             ),
@@ -54,16 +57,16 @@ class HomeScreen extends StatelessWidget {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => Lab1Screen(title: lab4)),
+                  MaterialPageRoute(builder: (context) => Lab4Screen(title: lab4)),
                 );
               },
             ),
             ElevatedButton(
-              child: Text(lab5),
+              child: Text(lab57),
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => Lab1Screen(title: lab5)),
+                  MaterialPageRoute(builder: (context) => LoginScreen(title: lab57)),
                 );
               },
             ),
