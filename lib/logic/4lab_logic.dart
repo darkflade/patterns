@@ -12,14 +12,12 @@ class NewPaymentAPI {
   }
 }
 
-// Старый интерфейс, который ждет приложение
 abstract class OldPaymentAPI {
   void connect();
   void pay(double amount);
   void disconnect();
 }
 
-// Адаптер, который притворяется старым, но под капотом юзает новый
 class PaymentAdapter implements OldPaymentAPI {
   final NewPaymentAPI _newApi;
   final String currency;
@@ -42,7 +40,6 @@ class PaymentAdapter implements OldPaymentAPI {
   }
 }
 
-// Для теста
 void testPaymentAdapter() {
   final newApi = NewPaymentAPI();
   final adapter = PaymentAdapter(newApi, currency: "EUR");

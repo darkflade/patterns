@@ -144,8 +144,30 @@ class NotesModel extends ChangeNotifier {
 
   List<Note> get notes => _notes;
 
-  NotesModel() {
-    _load();
+  NotesModel();
+
+  Future<void> loadNotes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = prefs.getString(_prefsKey);
+    if (jsonString == null) return;
+
+    final data = jsonDecode(jsonString) as List;
+    _notes.clear();
+
+    for (var n in data) {
+      switch (n["type"]) {
+        case "simple":
+          _notes.add(SimpleNote.fromJson(n));
+          break;
+        case "todo":
+          _notes.add(TodoNote.fromJson(n));
+          break;
+        case "tagged":
+          _notes.add(TaggedNote.fromJson(n));
+          break;
+      }
+    }
+    notifyListeners();
   }
 
   void add(Note note) {
@@ -178,27 +200,4 @@ class NotesModel extends ChangeNotifier {
     prefs.setString(_prefsKey, jsonEncode(jsonList));
   }
 
-  void _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonString = prefs.getString(_prefsKey);
-    if (jsonString == null) return;
-
-    final data = jsonDecode(jsonString) as List;
-    _notes.clear();
-
-    for (var n in data) {
-      switch (n["type"]) {
-        case "simple":
-          _notes.add(SimpleNote.fromJson(n));
-          break;
-        case "todo":
-          _notes.add(TodoNote.fromJson(n));
-          break;
-        case "tagged":
-          _notes.add(TaggedNote.fromJson(n));
-          break;
-      }
-    }
-    notifyListeners();
-  }
 }

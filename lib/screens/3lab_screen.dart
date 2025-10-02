@@ -119,13 +119,6 @@ class NotesList extends StatelessWidget {
                 value: item.done,
                 onChanged: (val) {
                   final model = Provider.of<NotesModel>(context, listen: false);
-                  // To ensure changes here are on a clone if EditNoteScreen works on a clone,
-                  // this direct modification might need rethinking if consistency is paramount
-                  // across editing contexts. However, for a simple toggle, this is often acceptable.
-                  // If EditNoteScreen's model of working on a clone is strictly adhered to,
-                  // one might consider navigating to edit even for this small change,
-                  // or making NotesList work with clones for interaction.
-                  // For now, this directly modifies the model's note.
                   item.done = val == true;
                   model.update(index, note); 
                 },

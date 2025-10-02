@@ -20,12 +20,10 @@ class _EditNoteScreenState extends State<EditNoteScreen> {
   @override
   void initState() {
     super.initState();
-    // Clone the note passed to the widget to work on a local copy
+
     _editableNote = widget.note.clone();
 
     _titleCtrl = TextEditingController(text: _editableNote.title);
-    // For TodoNote, contentCtrl might not be directly used for items,
-    // but the Note abstract class has it.
     _contentCtrl = TextEditingController(text: _editableNote.content);
   }
 
