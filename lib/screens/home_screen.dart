@@ -4,7 +4,7 @@ import '1lab_screen.dart';
 import '2lab.dart';
 import '3lab_screen.dart';
 import '4lab_screen.dart';
-//import '6lab_screen.dart';
+import '6lab_screen.dart';
 
 final String lab1 = "Лабораторная работа 1";
 final String lab2 = "Лабораторная работа 2";
@@ -74,13 +74,13 @@ class HomeScreen extends StatelessWidget {
         icon: Icons.chat_outlined,
         color: Colors.red,
       ),
-      /*_LabInfo(
+      _LabInfo(
         title: "Lab 6",
         subtitle: "State Pattern",
         screen: const Lab6Screen(),
         icon: Icons.atm_outlined,
         color: Colors.teal,
-      ),*/
+      ),
     ];
 
     return Scaffold(

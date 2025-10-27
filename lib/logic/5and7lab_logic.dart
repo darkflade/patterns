@@ -1,20 +1,16 @@
-// 5and7lab_logic.dart
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-// ===== Лаба 5: Декоратор =====
-
+// лАБА 5
 abstract class MessagePrinter {
   String printMessage(String message);
 }
 
-// Базовый простой вывод
 class SimplePrinter implements MessagePrinter {
   @override
   String printMessage(String message) => message;
 }
 
-// Декоратор с временем и типом
 class LogPrinter implements MessagePrinter {
   final MessagePrinter _wrappee;
   final String type;
@@ -28,7 +24,6 @@ class LogPrinter implements MessagePrinter {
   }
 }
 
-// Декоратор-обрамление
 class BorderPrinter implements MessagePrinter {
   final MessagePrinter _wrappee;
 
@@ -41,7 +36,6 @@ class BorderPrinter implements MessagePrinter {
   }
 }
 
-// Декоратор-счётчик
 class CountPrinter implements MessagePrinter {
   final MessagePrinter _wrappee;
   static int counter = 0;
@@ -56,7 +50,7 @@ class CountPrinter implements MessagePrinter {
   }
 }
 
-// ===== Лаба 7: Клиент =====
+// Лаба 7
 class ChatClient {
   final WebSocketChannel channel;
 

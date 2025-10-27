@@ -5,69 +5,9 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"sync"
-
-	"github.com/gorilla/websocket"
+	"server/ws"
 )
 
-// апгрейдер
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
-}
-
-// список клиентов
-var (
-	clients   = make(map[*websocket.Conn]bool)
-	broadcast = make(chan string)
-	mu        sync.Mutex
-)
-
-// обработка соединения
-func handleWS(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Println("Upgrade error:", err)
-		return
-	}
-	defer func() {
-		mu.Lock()
-		delete(clients, conn)
-		mu.Unlock()
-		conn.Close()
-	}()
-
-	mu.Lock()
-	clients[conn] = true
-	mu.Unlock()
-
-	for {
-		_, msg, err := conn.ReadMessage()
-		if err != nil {
-			log.Println("Read error:", err)
-			break
-		}
-		broadcast <- string(msg)
-	}
-}
-
-// слушаем канал и шлём всем
-func handleMessages() {
-	for {
-		msg := <-broadcast
-		mu.Lock()
-		for client := range clients {
-			err := client.WriteMessage(websocket.TextMessage, []byte(msg))
-			if err != nil {
-				log.Println("Write error:", err)
-				client.Close()
-				delete(clients, client)
-			}
-		}
-		mu.Unlock()
-	}
-}
-
-// вывод локальных IP для удобства
 func printLocalIPs(port string) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -99,13 +39,14 @@ func printLocalIPs(port string) {
 }
 
 func main() {
-	http.HandleFunc("/ws", handleWS)
+	// WS Manager
+	manager := ws.GetManager()
+	go manager.Run()
+
+	// HTTP Server
+	http.HandleFunc("/ws", ws.HandleWS)
 	port := "8080"
-
-	go handleMessages()
-
 	printLocalIPs(port)
-
 	addr := "0.0.0.0:" + port
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
