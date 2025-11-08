@@ -10,7 +10,9 @@ type Manager struct {
 }
 
 type Client struct {
-	manager *Manager
-	conn    *websocket.Conn
-	send    chan []byte
+	Username string
+	Role     string
+	manager  *Manager
+	conn     *websocket.Conn
+	send     chan []byte
 }

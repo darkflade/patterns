@@ -1,4 +1,4 @@
-package sfu
+package ws
 
 import (
 	cl "server/color-logger"
@@ -9,5 +9,5 @@ import (
 var logger logging.LeveledLogger
 
 func init() {
-	logger = cl.Factory.NewLogger("sfu")
+	logger = cl.Factory.NewLogger("ws")
 }

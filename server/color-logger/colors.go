@@ -1,4 +1,4 @@
-package logger
+package color_logger
 
 const (
 	colorReset  = "\033[0m"

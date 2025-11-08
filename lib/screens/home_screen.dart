@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:patterns/screens/project_login_screen.dart';
 import 'lab5_7_login_screen.dart';
 import '1lab_screen.dart';
 import '2lab.dart';
@@ -12,6 +13,7 @@ final String lab3 = "Лабораторная работа 3";
 final String lab4 = "Лабораторная работа 4";
 final String lab57 = "Лабораторная работа 5 и 7";
 final String lab6 = "Лабораторная работа 6";
+final String project = "Проект";
 
 // A data class to hold information about each lab for the grid.
 class _LabInfo {
@@ -81,6 +83,13 @@ class HomeScreen extends StatelessWidget {
         icon: Icons.atm_outlined,
         color: Colors.teal,
       ),
+      _LabInfo(
+        title: "Project",
+        subtitle: "Decorator & Client-Server",
+        screen: ProjectLoginScreen(title: project),
+        icon: Icons.chat_outlined,
+        color: Colors.red,
+      )
     ];
 
     return Scaffold(

@@ -1,18 +1,30 @@
 package common
 
+import "encoding/json"
+
 const (
-	MessageTypeChat         = "chat_message"
+	MessageTypeChat = "chat_message"
+
+	// webrtc guys
+	// Custom
+	MessageTypeJoinCall        = "join_call"
+	MessageTypeJoinCallSuccess = "join_call_success"
+	// Default
 	MessageTypeSdpOffer     = "sdp_offer"
 	MessageTypeSdpAnswer    = "sdp_answer"
 	MessageTypeIceCandidate = "ice_candidate"
 )
 
 type Message struct {
-	Type    string      `json:"type"`
-	Payload interface{} `json:"payload"`
+	Type    string          `json:"type"`
+	Payload json.RawMessage `json:"payload"`
 }
 
-type ChatPayload struct {
+type ClientChatPayload struct {
+	Text string `json:"text"`
+}
+
+type ServerChatPayload struct {
 	Sender string `json:"sender"`
 	Role   string `json:"role"`
 	Text   string `json:"text"`
@@ -31,7 +43,6 @@ type WebSocketWriter interface {
 }
 
 type SignalingMessage struct {
-	Type   string      `json:"type"`
-	RoomID string      `json:"room_id"`
-	Data   interface{} `json:"data"`
+	Type    string          `json:"type"`
+	Payload json.RawMessage `json:"payload"`
 }

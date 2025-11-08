@@ -32,14 +32,12 @@ func (manager *Manager) Run() {
 		select {
 		case client := <-manager.register:
 			manager.clients[client] = true
-			// TODO Logger
 
 		case client := <-manager.unregister:
 			if _, ok := manager.clients[client]; ok {
 				delete(manager.clients, client)
 				close(client.send)
 			}
-			// TODO logger
 
 		case message := <-manager.broadcast:
 			for client := range manager.clients {
@@ -57,33 +55,44 @@ func (manager *Manager) Run() {
 func (c *Client) readPump() {
 	defer func() {
 		c.manager.unregister <- c
-		c.conn.Close()
+		sfu.GetManager().RemoveClient(c.Username)
+		err := c.conn.Close()
+		if err != nil {
+			logger.Errorf("Close connection failed: %v", err)
+		}
 	}()
 
 	for {
 		_, messagePayload, err := c.conn.ReadMessage()
 		if err != nil {
-			log.Println("read:", err)
-			continue
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("error: %v", err)
+			}
+			break
 		}
 
 		var message common.Message
 		err = json.Unmarshal(messagePayload, &message)
 		if err != nil {
-			log.Printf("Error unmarshalling message: %s\n", err)
+			logger.Errorf("Error unmarshalling message: %s\n", err)
 			continue
 		}
 
+		logger.Tracef("Received message: %s\n", messagePayload)
+
 		switch message.Type {
 		case common.MessageTypeChat:
-			c.manager.broadcast <- messagePayload
+			HandleChat(c, message.Payload)
+		case common.MessageTypeJoinCall:
+			sfu.HandleJoinCall(c.Username, c.conn)
 		case common.MessageTypeIceCandidate:
-			sfu.HandleICECandidate(message.Type, message.Payload)
+			sfu.HandleICECandidate(c.Username, message.Payload)
 		case common.MessageTypeSdpAnswer:
-			sfu.HandleSDPAnswer(message.Type, message.Payload)
+			sfu.HandleSDPAnswer(c.Username, message.Payload)
 		case common.MessageTypeSdpOffer:
-			sfu.HandleSDPOffer(message.Type, c.conn, message.Payload)
-
+			sfu.HandleSDPOffer(c.Username, message.Payload)
+		default:
+			logger.Errorf("Unknown message type: %s\n Content %v", message.Type, messagePayload)
 		}
 
 	}
@@ -91,19 +100,26 @@ func (c *Client) readPump() {
 
 func (c *Client) writePump() {
 	defer func() {
-		c.conn.Close()
+		err := c.conn.Close()
+		if err != nil {
+			logger.Errorf("Close connection failed: %v", err)
+		}
 	}()
 
 	for {
 		message, ok := <-c.send
 		if !ok {
-			c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+			err := c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+			if err != nil {
+
+				logger.Errorf("Write close message error: %v", err)
+			}
 			return
 		}
 
 		err := c.conn.WriteMessage(websocket.TextMessage, message)
 		if err != nil {
-			log.Println("write:", err)
+			logger.Errorf("Write message error: %v", err)
 			return
 		}
 	}

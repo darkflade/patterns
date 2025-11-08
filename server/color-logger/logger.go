@@ -1,4 +1,4 @@
-package logger
+package color_logger
 
 import (
 	"fmt"
@@ -12,12 +12,18 @@ type ColorLogger struct {
 }
 type ColorLoggerFactory struct{}
 
+var Factory *ColorLoggerFactory
+
+func init() {
+	Factory = &ColorLoggerFactory{}
+}
+
 func (f *ColorLoggerFactory) NewLogger(scope string) logging.LeveledLogger {
 	return &ColorLogger{scope: scope}
 }
 
 func (l *ColorLogger) log(level string, color string, msg string) {
-	log.Printf("%s[%s] [%s] %s%s", color, level, l.scope, msg, colorReset)
+	log.Printf("%s[%s] [%s] %s%s", color, l.scope, level, msg, colorReset)
 }
 
 // Logger levels appearance

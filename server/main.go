@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"server/database"
 	"server/ws"
 )
 
@@ -42,6 +43,12 @@ func main() {
 	// WS Manager
 	manager := ws.GetManager()
 	go manager.Run()
+
+	// Database init
+	_, err := database.InitDB("./chat.db")
+	if err != nil {
+		log.Fatalf("For some reason failed init database: %v", err)
+	}
 
 	// HTTP Server
 	http.HandleFunc("/ws", ws.HandleWS)
