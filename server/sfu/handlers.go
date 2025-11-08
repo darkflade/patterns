@@ -62,9 +62,12 @@ func HandleJoinCall(username string, wsWriter common.WebSocketWriter) {
 		return
 	}
 
-	client.WebSocket.WriteJSON(&common.Message{
+	err = client.WebSocket.WriteJSON(&common.Message{
 		Type: common.MessageTypeJoinCallSuccess,
 	})
+	if err != nil {
+		logger.Errorf("HandleJoinCall error: %v", err)
+	}
 }
 
 func HandleSDPOffer(username string, payload json.RawMessage) {
@@ -162,4 +165,36 @@ func (m *Manager) sendExistingTracksToClient(newClient *Client) {
 		}
 	}
 	m.mu.RUnlock()
+}
+
+func GetSFUClients(wsWriter common.WebSocketWriter) {
+	sfuManager := GetManager()
+
+	sfuManager.mu.RLock()
+	defer sfuManager.mu.RUnlock()
+
+	activeClientsInfo := make([]common.ActiveClients, 0, len(sfuManager.Clients))
+
+	for _, client := range sfuManager.Clients {
+		activeClientsInfo = append(activeClientsInfo, common.ActiveClients{
+			Username: client.Username,
+		})
+	}
+
+	activeClientsInfoBytes, err := json.Marshal(activeClientsInfo)
+	if err != nil {
+		logger.Errorf("Failed to marshal active clients: %v", err)
+		return
+	}
+
+	clientsToSend := common.Message{
+		Type:    common.MessageTypeActiveClientsSFUResponse,
+		Payload: activeClientsInfoBytes,
+	}
+
+	err = wsWriter.WriteJSON(clientsToSend)
+	if err != nil {
+		logger.Errorf("Failed to send active clients: %v", err)
+	}
+
 }

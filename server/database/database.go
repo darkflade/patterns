@@ -73,9 +73,16 @@ func CreateUser(db *sql.DB, username string) (string, error) {
 				return "", insertErr
 			}
 		} else {
-			log.Printf("Ошибка получения роли для %s: %v", username, err)
+			logger.Errorf("Ошибка получения роли для %s: %v", username, err)
 			return "", err
 		}
 	}
 	return role, nil
+}
+
+func UpdateUser(db *sql.DB, clientUsername string, clientRole string) {
+	_, err := db.Exec("UPDATE users SET role = ? WHERE username = ?", clientRole, clientUsername)
+	if err != nil {
+		logger.Errorf("Произошла ошибка %v", err)
+	}
 }

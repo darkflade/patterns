@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:patterns/logic/project_logic.dart';
@@ -20,18 +18,24 @@ class _ProjectScreenState extends State<ProjectScreen> {
   final _controller = TextEditingController();
   final List<ChatMessage> _messages = [];
   late ChatClient _client;
+  late UserManager _userManager;
 
   // WebRTC
-  RTCPeerConnection? _peerConnection;
+  late WebRTCManager _webRTCManager;
+  /*RTCPeerConnection? _peerConnection;
   MediaStream? _localStream;
   MediaStream? _remoteStream;
-  final _remoteRenderer = RTCVideoRenderer();
+  final _remoteRenderer = RTCVideoRenderer();*/
 
   @override
   void initState() {
     super.initState();
-    _remoteRenderer.initialize();
+    //_remoteRenderer.initialize();
     _client = ChatClient("ws://${widget.ip}/ws", widget.username);
+
+    _webRTCManager = WebRTCManager(_client);
+    _userManager = UserManager(_client);
+    _userManager.addListener(_onUsersChanged);
 
     _client.messages.listen((msg) {
         setState(() {
@@ -39,7 +43,12 @@ class _ProjectScreenState extends State<ProjectScreen> {
         });
     });
 
-    _client.rawMessages.listen(_handleSignalingMessage);
+    //_client.rawMessages.listen(_handleSignalingMessage);
+  }
+
+  void _onUsersChanged() {
+    // Просто перерисовываем экран
+    setState(() {});
   }
 
   void _sendMessage() {
@@ -51,7 +60,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
     _controller.clear();
   }
 
-  void _handleSignalingMessage(dynamic data) async {
+ /* void _handleSignalingMessage(dynamic data) async {
     if (_peerConnection == null) return;
     final decoded = jsonDecode(data);
     final type = decoded['type'];
@@ -181,26 +190,54 @@ class _ProjectScreenState extends State<ProjectScreen> {
 
     print("📲 Отправляем 'join_call' на сервер...");
     _client.sendJson({ "type": "join_call" });
-  }
+  }*/
 
   @override
   void dispose() {
+    /*
     _remoteRenderer.dispose();
     _localStream?.getTracks().forEach((track) => track.stop());
     _peerConnection?.close();
+     */
+    _userManager.removeListener(_onUsersChanged);
+    _webRTCManager.dispose();
     _client.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final userList = _userManager.userList;
     return Scaffold(
       appBar: AppBar(
           title: Text(widget.title),
           actions: [
             IconButton(
+              icon: const Icon(Icons.people),
+              onPressed: () {
+                // Здесь можно показать Drawer или новый экран со списком `userList`
+                showModalBottomSheet(
+                  context: context,
+                  builder: (context) => ListView.builder(
+                    itemCount: userList.length,
+                    itemBuilder: (context, index) {
+                      final user = userList[index];
+                      return ListTile(
+                        title: Text(user.username),
+                        subtitle: Text(user.role),
+                        trailing: Icon(
+                          Icons.circle,
+                          color: user.isInCall ? Colors.green : Colors.grey,
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+            IconButton(
               icon: const Icon(Icons.call),
-              onPressed: _joinCall,
+              onPressed: _webRTCManager.joinCall,
             ),
           ],
       ),
@@ -209,7 +246,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
           SizedBox(
             width: 0,
             height: 0,
-            child: RTCVideoView(_remoteRenderer),
+            child: RTCVideoView(_webRTCManager.remoteRenderer),
           ),
           Expanded(
             child: ListView.builder(

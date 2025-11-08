@@ -2,7 +2,6 @@ package ws
 
 import (
 	"encoding/json"
-	"log"
 	"server/common"
 	"server/sfu"
 	"sync"
@@ -32,11 +31,13 @@ func (manager *Manager) Run() {
 		select {
 		case client := <-manager.register:
 			manager.clients[client] = true
+			go HandleJoinUserResponse(client.Username, client.Role)
 
 		case client := <-manager.unregister:
 			if _, ok := manager.clients[client]; ok {
 				delete(manager.clients, client)
 				close(client.send)
+				go HandleLeaveUserResponse(client.Username, client.Role)
 			}
 
 		case message := <-manager.broadcast:
@@ -52,8 +53,10 @@ func (manager *Manager) Run() {
 	}
 }
 
+// TODO Rewrite logs
 func (c *Client) readPump() {
 	defer func() {
+		logger.Debugf("--- 🛑 readPump для %s ЗАВЕРШЕН ---", c.Username)
 		c.manager.unregister <- c
 		sfu.GetManager().RemoveClient(c.Username)
 		err := c.conn.Close()
@@ -62,15 +65,21 @@ func (c *Client) readPump() {
 		}
 	}()
 
+	logger.Debugf("--- ▶️ readPump для %s ЗАПУЩЕН ---", c.Username)
+
 	for {
 		_, messagePayload, err := c.conn.ReadMessage()
 		if err != nil {
+			logger.Errorf("ОШИБКА в c.conn.ReadMessage() для %s: %v", c.Username, err)
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("error: %v", err)
+				logger.Errorf("   (это была НЕОЖИДАННАЯ ошибка закрытия)")
+			} else {
+				logger.Debug("   (это было ОЖИДАЕМОЕ закрытие соединения, например, клиент закрыл вкладку)")
 			}
 			break
 		}
 
+		logger.Debugf("📥 Получено сообщение от %s: %s", c.Username, string(messagePayload))
 		var message common.Message
 		err = json.Unmarshal(messagePayload, &message)
 		if err != nil {
@@ -91,6 +100,12 @@ func (c *Client) readPump() {
 			sfu.HandleSDPAnswer(c.Username, message.Payload)
 		case common.MessageTypeSdpOffer:
 			sfu.HandleSDPOffer(c.Username, message.Payload)
+		case common.MessageTypeActiveClientsWS:
+			GetWSClients(c.conn)
+		case common.MessageTypeActiveClientsSFU:
+			sfu.GetSFUClients(c.conn)
+		case common.MessageTypePromoteUser:
+			HandlePromoteUser(c, message.Payload)
 		default:
 			logger.Errorf("Unknown message type: %s\n Content %v", message.Type, messagePayload)
 		}
@@ -114,6 +129,7 @@ func (c *Client) writePump() {
 
 				logger.Errorf("Write close message error: %v", err)
 			}
+			logger.Error("Special write pump error")
 			return
 		}
 

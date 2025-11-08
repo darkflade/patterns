@@ -13,3 +13,15 @@ class ChatMessage {
     );
   }
 }
+
+class UserStatus {
+  final String username;
+  String role;
+  bool isInCall;
+
+  UserStatus({
+    required this.username,
+    required this.role,
+    this.isInCall = false,
+  });
+}
