@@ -15,6 +15,7 @@ class ProjectScreen extends StatefulWidget {
 }
 
 class _ProjectScreenState extends State<ProjectScreen> {
+  late final Me _me;
   final _controller = TextEditingController();
   final List<ChatMessage> _messages = [];
   late ChatClient _client;
@@ -22,32 +23,26 @@ class _ProjectScreenState extends State<ProjectScreen> {
 
   // WebRTC
   late WebRTCManager _webRTCManager;
-  /*RTCPeerConnection? _peerConnection;
-  MediaStream? _localStream;
-  MediaStream? _remoteStream;
-  final _remoteRenderer = RTCVideoRenderer();*/
 
   @override
   void initState() {
     super.initState();
-    //_remoteRenderer.initialize();
     _client = ChatClient("ws://${widget.ip}/ws", widget.username);
+    _me = Me(username: widget.username, role: 'peasant');
 
     _webRTCManager = WebRTCManager(_client);
-    _userManager = UserManager(_client);
+    _userManager = UserManager(_me, _client);
     _userManager.addListener(_onUsersChanged);
 
     _client.messages.listen((msg) {
-        setState(() {
+      setState(() {
           _messages.add(msg);
         });
     });
 
-    //_client.rawMessages.listen(_handleSignalingMessage);
   }
 
   void _onUsersChanged() {
-    // Просто перерисовываем экран
     setState(() {});
   }
 
@@ -60,145 +55,8 @@ class _ProjectScreenState extends State<ProjectScreen> {
     _controller.clear();
   }
 
- /* void _handleSignalingMessage(dynamic data) async {
-    if (_peerConnection == null) return;
-    final decoded = jsonDecode(data);
-    final type = decoded['type'];
-    final payload = decoded['payload'];
-
-    switch(type) {
-
-      case 'sdp_answer':
-        final answer = RTCSessionDescription(payload['sdp'], payload['type']);
-        print("🧩----------- Текущий signalingState: ${_peerConnection?.signalingState}");
-        await _peerConnection?.setRemoteDescription(answer);
-        break;
-
-      case 'ice_candidate':
-        final candidate = RTCIceCandidate(
-          payload['candidate'],
-          payload['sdpMid'],
-          payload['sdpMLineIndex'],
-        );
-        await _peerConnection?.addCandidate(candidate);
-        break;
-
-      case 'sdp_offer':
-        print("ПОЛУЧЕН встречный Offer от сервера");
-        try {
-          final offer = RTCSessionDescription(payload['sdp'], payload['type']);
-
-          if (_peerConnection!.signalingState == RTCSignalingState.RTCSignalingStateStable) {
-            await _peerConnection?.setRemoteDescription(offer);
-            final answer = await _peerConnection!.createAnswer();
-            print(
-                "🧩 Текущий signalingState: ${_peerConnection?.signalingState}");
-            await _peerConnection!.setLocalDescription(answer);
-
-            _client.sendJson({
-              "type": "sdp_answer",
-              "payload": answer.toMap(),
-            });
-            print("✅ Ответили на server offer");
-          }
-        } catch (e) {
-          print("❌ Ошибка при обработке server offer: $e");
-        }
-        break;
-      case 'join_call_success':
-        print("Сервер подтвердил вход в звонок. Начинаем настройку медиа.");
-        _localStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': true});
-        _localStream!.getTracks().forEach((track) {
-          _peerConnection?.addTrack(track, _localStream!);
-        });
-        break;
-      default:
-        print('Unknown message type was received $type');
-        break;
-    }
-  }
-
-  Future<void> _performNegotiation() async {
-
-    try {
-      print("📤 Создаем offer на клиенте");
-      final offer = await _peerConnection!.createOffer();
-      await _peerConnection!.setLocalDescription(offer);
-
-      _client.sendJson({
-        "type": "sdp_offer",
-        "payload": offer.toMap(),
-      });
-
-      print("✅ Offer отправлен на сервер");
-    } catch (e) {
-      print("❌ Ошибка в _performNegotiation: $e");
-    }
-  }
-
-
-  void _joinCall() async {
-    if (_peerConnection != null) {
-      print("⚠️ Попытка вызвать _joinCall, когда _peerConnection уже существует.");
-      return;
-    }
-    print("--- 🎬 НАЧИНАЕМ _joinCall ---");
-
-
-    _peerConnection = await createPeerConnection({});
-
-    _peerConnection!.onSignalingState = (state) {
-      print("🚦 SignalingState изменился: $state");
-    };
-    _peerConnection!.onIceGatheringState = (state) {
-      print("🧊 IceGatheringState изменился: $state");
-    };
-    _peerConnection!.onIceConnectionState = (state) {
-      print("🔌 IceConnectionState изменился: $state");
-    };
-    _peerConnection!.onConnectionState = (state) {
-      print("🔗 ConnectionState изменился: $state");
-    };
-
-    _peerConnection!.onIceCandidate = (candidate) {
-
-      print("🔍 Найден локальный ICE кандидат, отправляем на сервер.");
-      _client.sendJson({
-        "type": "ice_candidate",
-        "payload": candidate.toMap(),
-      });
-
-    };
-
-    _peerConnection!.onTrack = (RTCTrackEvent event) {
-      print('New track from remote: ${event.track.kind}');
-      if (event.track.kind == 'audio') {
-        setState(() {
-          print("➡️ Устанавливаю удаленный поток в рендерер...");
-          _remoteStream = event.streams[0];
-          _remoteRenderer.srcObject = _remoteStream;
-        });
-      }
-    };
-
-
-
-    _peerConnection!.onRenegotiationNeeded = () async {
-      print("🔄 OnNegotiationNeeded сработал");
-      await _performNegotiation();
-    };
-
-    print("📲 Отправляем 'join_call' на сервер...");
-    _client.sendJson({ "type": "join_call" });
-  }*/
-
   @override
   void dispose() {
-    /*
-    _remoteRenderer.dispose();
-    _localStream?.getTracks().forEach((track) => track.stop());
-    _peerConnection?.close();
-     */
     _userManager.removeListener(_onUsersChanged);
     _webRTCManager.dispose();
     _client.dispose();
@@ -208,6 +66,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
   @override
   Widget build(BuildContext context) {
     final userList = _userManager.userList;
+
     return Scaffold(
       appBar: AppBar(
           title: Text(widget.title),
@@ -215,21 +74,58 @@ class _ProjectScreenState extends State<ProjectScreen> {
             IconButton(
               icon: const Icon(Icons.people),
               onPressed: () {
-                // Здесь можно показать Drawer или новый экран со списком `userList`
                 showModalBottomSheet(
                   context: context,
                   builder: (context) => ListView.builder(
                     itemCount: userList.length,
                     itemBuilder: (context, index) {
                       final user = userList[index];
-                      return ListTile(
-                        title: Text(user.username),
-                        subtitle: Text(user.role),
-                        trailing: Icon(
+                      Widget tile = ListTile(
+                        leading: Icon(
                           Icons.circle,
                           color: user.isInCall ? Colors.green : Colors.grey,
+                          size: 14,
                         ),
+                        title: Text(user.username),
+                        subtitle: Text(user.role),
+                        trailing: (_me.isAdmin && user.username != _me.username)
+                            ? IconButton(
+                          icon: const Icon(Icons.upgrade),
+                          tooltip: 'Изменить роль',
+                          onPressed: () {
+                            _showPromoteDialog(context, user);
+                          },
+                        )
+                            : null,
                       );
+                      if (user.role == 'admin') {
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.amber.shade700, width: 2),
+                            borderRadius: BorderRadius.circular(12),
+                            gradient: LinearGradient(
+                              colors: [Colors.amber.shade100, Colors.white],
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                            ),
+                          ),
+                          child: tile,
+                        );
+                      }
+
+                      if (user.role == 'moderator') {
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.blue.shade700, width: 1.5),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: tile,
+                        );
+                      }
+
+                      return tile;
                     },
                   ),
                 );
@@ -256,13 +152,29 @@ class _ProjectScreenState extends State<ProjectScreen> {
                 final msg = _messages[index];
                 final isMe = msg.sender == widget.username;
 
+                Color getRoleColor(String role) {
+                  switch (role.toLowerCase()) {
+                    case 'admin':
+                      return Colors.redAccent.shade100;
+                    case 'moderator':
+                      return Colors.blueAccent.shade100;
+                    case 'peasant':
+                      return Colors.greenAccent.shade100;
+                    default:
+                      return Colors.deepPurple.shade50;
+                  }
+                }
+
+                Color bgColor = isMe ? Colors.deepPurple[100]! : getRoleColor(msg.role);
+                Color textColor = isMe ? Colors.deepPurple : Colors.black87;
+
                 return Align(
                   alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
                     margin: const EdgeInsets.symmetric(vertical: 4),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: isMe ? Colors.deepPurple[100] : Colors.green[100],
+                      color: bgColor,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
@@ -272,12 +184,12 @@ class _ProjectScreenState extends State<ProjectScreen> {
                           "${msg.sender} (${msg.role})",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: isMe ? Colors.deepPurple : Colors.green[800],
+                            color: textColor,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(msg.text),
-                      ]
+                      ],
                     ),
                   ),
                 );
@@ -308,6 +220,51 @@ class _ProjectScreenState extends State<ProjectScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showPromoteDialog(BuildContext context, UserStatus userToPromote) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Text('Повысить ${userToPromote.username}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ListTile(
+                title: const Text('Сделать крестьянином'),
+                onTap: () {
+                  _userManager.promoteUser(userToPromote.username, 'peasant');
+                  Navigator.of(dialogContext).pop();
+                },
+              ),
+              ListTile(
+                title: const Text('Сделать модератором'),
+                onTap: () {
+                  _userManager.promoteUser(userToPromote.username, 'moderator');
+                  Navigator.of(dialogContext).pop();
+                },
+              ),
+              ListTile(
+                title: const Text('Сделать админом'),
+                onTap: () {
+                  _userManager.promoteUser(userToPromote.username, 'admin');
+                  Navigator.of(dialogContext).pop();
+                },
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Отмена'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }

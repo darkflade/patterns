@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	manager *Manager
-	once    sync.Once
+	manager       *Manager
+	once          sync.Once
+	EventsChannel = make(chan Event, 10)
 )
 
 func GetManager() *Manager {
@@ -26,7 +27,7 @@ func GetManager() *Manager {
 	return manager
 }
 
-func (m *Manager) AddClient(username string, wsWriter common.WebSocketWriter) (*Client, error) {
+func (m *Manager) AddClient(context common.ClientContext) (*Client, error) {
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
 		logger.Errorf(err.Error())
@@ -43,17 +44,19 @@ func (m *Manager) AddClient(username string, wsWriter common.WebSocketWriter) (*
 	}
 
 	newClient := &Client{
-		Username:       username,
+		Username:       context.GetUsername(),
 		PeerConnection: peerConnection,
-		WebSocket:      wsWriter,
+		Context:        context,
 		mu:             sync.RWMutex{},
 	}
 
 	m.mu.Lock()
-	m.Clients[username] = newClient
+	m.Clients[newClient.Username] = newClient
 	m.mu.Unlock()
 
-	logger.Infof("Joined %s", username)
+	logger.Infof("Joined %s", newClient.Username)
+	EventsChannel <- Event{InitiatorUsername: newClient.Username, Type: common.MessageTypeUserJoinSFU}
+
 	m.setupPeerConnectionHandlers(newClient)
 
 	return newClient, nil
@@ -67,6 +70,7 @@ func (m *Manager) RemoveClient(username string) {
 	if ok {
 		client.PeerConnection.Close()
 		delete(m.Clients, username)
+		EventsChannel <- Event{InitiatorUsername: username, Type: common.MessageTypeUserLeaveSFU}
 		logger.Infof("Клиент '%s' удален.", username)
 	}
 }
@@ -84,10 +88,12 @@ func (manager *Manager) setupPeerConnectionHandlers(client *Client) {
 			logger.Errorf(err.Error())
 		}
 
-		client.WebSocket.WriteJSON(&common.SignalingMessage{
+		candidateMessageBytes, err := json.Marshal(common.SignalingMessage{
 			Type:    common.MessageTypeIceCandidate,
 			Payload: candidateBytes,
 		})
+
+		client.Context.Send(candidateMessageBytes)
 	})
 
 	client.PeerConnection.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {

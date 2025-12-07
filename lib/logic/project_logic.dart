@@ -5,6 +5,16 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:patterns/models/project_model.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+class Me {
+  final String username;
+  String role;
+
+  Me({required this.username, required this.role});
+
+  bool get isAdmin => role == 'admin';
+  bool get isModerator => role == 'moderator';
+}
+
 class ChatClient {
   final WebSocketChannel _channel;
   late final Stream<dynamic> _broadcastStream;
@@ -113,7 +123,19 @@ class WebRTCManager {
           break;
         case 'join_call_success':
           print("Сервер подтвердил вход в звонок. Начинаем настройку медиа.");
-          _localStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': true});
+            _localStream = await navigator.mediaDevices.getUserMedia({'audio':
+            {
+              'channelCount': 2,
+              'sampleRate': 48000,
+              'echoCancellation': false,
+              'googEchoCancellation': false,
+              'googEchoCancellation2': false,
+              'googDAEchoCancellation': false,
+              'noiseSuppression': false,
+              'googNoiseSuppression': false,
+              'autoGainControl': false,
+              'googAutoGainControl': false,
+            }, 'video': false}); // Bug Without True in video on mobile devices with infinite send offers. Doesn't know in this config it works well
           _localStream!.getTracks().forEach((track) {
             _peerConnection?.addTrack(track, _localStream!);
           });
@@ -131,6 +153,18 @@ class WebRTCManager {
       return;
     }
     print("--- 🎬 НАЧИНАЕМ _joinCall ---");
+
+    print("🔊 Устанавливаем аудио-конфигурацию ДО создания PeerConnection...");
+    AndroidNativeAudioManagement.setAndroidAudioConfiguration(
+        AndroidAudioConfiguration(
+          androidAudioMode: AndroidAudioMode.normal,
+          androidAudioStreamType: AndroidAudioStreamType.music,
+          androidAudioAttributesUsageType: AndroidAudioAttributesUsageType.media,
+          androidAudioAttributesContentType: AndroidAudioAttributesContentType.music,
+          forceHandleAudioRouting: true,
+        )
+    );
+    print("🔊 Аудио-конфигурация установлена в 'normal'/'music'.");
 
 
     _peerConnection = await createPeerConnection({});
@@ -196,17 +230,15 @@ class WebRTCManager {
 }
 
 class UserManager with ChangeNotifier {
+  final Me _me;
   final ChatClient _client;
 
-  // Наше состояние - Map пользователей
   final Map<String, UserStatus> _users = {};
   List<UserStatus> get userList => _users.values.toList();
 
-  UserManager(this._client) {
-    // Подписываемся на сообщения, чтобы обновлять список
+  UserManager(this._me,this._client) {
     _listenToMessages();
 
-    // Сразу запрашиваем начальное состояние
     _client.sendJson({"type": "active_clients_ws"});
     _client.sendJson({"type": "active_clients_sfu"});
   }
@@ -216,6 +248,7 @@ class UserManager with ChangeNotifier {
       print("📥 UserManager RECEIVED: $data");
       final decoded = jsonDecode(data);
       final type = decoded['type'];
+
       bool shouldUpdate = false;
 
       switch (type) {
@@ -230,6 +263,11 @@ class UserManager with ChangeNotifier {
               );
             }
           }
+
+          if (_users.containsKey(_me.username)) {
+            _me.role = _users[_me.username]!.role;
+          }
+
           shouldUpdate = true;
           break;
 
@@ -245,7 +283,7 @@ class UserManager with ChangeNotifier {
           shouldUpdate = true;
           break;
 
-        case 'user_joined':
+        case 'user_joined_ws':
           final payload = decoded['payload'];
           final username = payload['username'];
           _users[username] = UserStatus(
@@ -255,133 +293,63 @@ class UserManager with ChangeNotifier {
           shouldUpdate = true;
           break;
 
-        case 'user_left':
+        case 'user_left_ws':
           final payload = decoded['payload'];
           _users.remove(payload['username']);
           shouldUpdate = true;
           break;
+
+        case 'user_joined_sfu':
+          final payload = decoded['payload'];
+          final username = payload['username'];
+          if (_users.containsKey(username)) {
+            _users[username]!.isInCall = true;
+            shouldUpdate = true;
+          }
+          break;
+
+        case 'user_left_sfu':
+          final payload = decoded['payload'];
+          final username = payload['username'];
+          if (_users.containsKey(username)) {
+            _users[username]!.isInCall = false;
+            shouldUpdate = true;
+          }
+          break;
+
+
+        case 'promote_user_response':
+          final payload = decoded['payload'];
+          final username = payload['username'];
+          final newRole = payload['new_role'];
+          if (_users.containsKey(username)) {
+            _users[username]!.role = newRole;
+            shouldUpdate = true;
+          }
+
+          if (username == _me.username) {
+            _me.role = newRole;
+          }
+          break;
+        default:
+          print('Unknown message type was received $type');
+          break;
       }
 
       if (shouldUpdate) {
-        // "Кричим" UI, что список пользователей изменился
         notifyListeners();
       }
     });
   }
-}
-
-/*
-class WebRTCPeer {
-  final ChatClient client;
-  final RTCVideoRenderer remoteRenderer;
-  late RTCPeerConnection _pc;
-  bool polite = true;
-  bool makingOffer = false;
-  bool ignoreOffer = false;
-  MediaStream? _localStream;
-  final List<RTCIceCandidate> _iceBuffer = [];
-
-  WebRTCPeer(this.client, this.remoteRenderer);
-
-  Future<void> init() async {
-    _pc = await createPeerConnection({
-    });
-
-    _pc.onIceCandidate = (RTCIceCandidate? candidate) {
-      if (candidate == null) return;
-
-
-        client.sendJson({
-          'type': 'ice_candidate',
-          'payload': candidate.toMap(),
-        });
-
-    };
-
-    _pc.onTrack = (RTCTrackEvent event) {
-      if (event.streams.isNotEmpty) {
-        remoteRenderer.srcObject = event.streams.first;
+  void promoteUser(String username, String newRole) {
+    print("👑 Отправляем команду на повышение $username до $newRole");
+    _client.sendJson({
+      "type": "promote_user",
+      "payload": {
+        "username": username,
+        "new_role": newRole,
       }
-    };
-
-    // Подписка на сообщения
-    client.rawMessages.listen((message) => _handleMessage(message));
-  }
-
-  Future<void> _handleMessage(dynamic message) async {
-    final msg = jsonDecode(message as String);
-    final type = msg['type'];
-    final payload = msg['payload'];
-
-    switch (type) {
-      case 'join_call_success':
-        print('joined');
-        // теперь можно добавлять локальные треки и делать offer
-        if (_localStream != null) {
-          await _addLocalTracksAndOffer(_localStream!);
-        }
-        break;
-
-      case 'sdp_offer':
-        final offer = RTCSessionDescription(payload['sdp'], payload['type']);
-        final isStable = _pc.signalingState == RTCSignalingState.RTCSignalingStateStable;
-        final offerCollision = makingOffer || !isStable;
-        ignoreOffer = !polite && offerCollision;
-        if (ignoreOffer) return;
-
-        await _pc.setRemoteDescription(offer);
-        // после установки remoteDescription — отправляем все буферизированные ICE
-        for (var cand in _iceBuffer) {
-          client.sendJson({'type': 'ice_candidate', 'payload': cand.toMap()});
-        }
-        _iceBuffer.clear();
-
-        final answer = await _pc.createAnswer();
-        await _pc.setLocalDescription(answer);
-        client.sendJson({'type': 'sdp_answer', 'payload': answer.toMap()});
-        break;
-
-      case 'sdp_answer':
-        final answer = RTCSessionDescription(payload['sdp'], payload['type']);
-        await _pc.setRemoteDescription(answer);
-
-        // после remoteDescription — шлём буферизированные кандидаты
-        for (var cand in _iceBuffer) {
-          client.sendJson({'type': 'ice_candidate', 'payload': cand.toMap()});
-        }
-        _iceBuffer.clear();
-        break;
-
-      case 'ice_candidate':
-        final c = payload;
-        final candidate = RTCIceCandidate(c['candidate'], c['sdpMid'], c['sdpMLineIndex']);
-        await _pc.addCandidate(candidate);
-        break;
-    }
-  }
-
-  Future<void> startCall() async {
-    _localStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': true});
-    // не добавляем треки пока не пришёл join_call_success
-    client.sendJson({'type': 'join_call'});
-  }
-
-  Future<void> _addLocalTracksAndOffer(MediaStream stream) async {
-    for (var track in stream.getTracks()) {
-      await _pc.addTrack(track, stream);
-    }
-
-    makingOffer = true;
-    final offer = await _pc.createOffer();
-    await _pc.setLocalDescription(offer);
-    client.sendJson({'type': 'sdp_offer', 'payload': offer.toMap()});
-    makingOffer = false;
-  }
-
-  Future<void> dispose() async {
-    _localStream?.getTracks().forEach((t) => t.stop());
-    await _pc.close();
-    remoteRenderer.srcObject = null;
+    });
   }
 }
- */
+

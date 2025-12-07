@@ -92,29 +92,61 @@ All ICE and SDP sending in payload
 }
 ```
 
+### Response
+```json
+{
+  "type": "promote_user_response",
+  "payload": {
+    "username": "<name_of_user_to_change_role>",
+    "new_role": "<new_role>"
+  }
+}
+```
+
 # System Messages
 
 ## Common System Message
 
-## User Join
+## User Join WebSocket
 ### Response
 ```json 
 {
-  "type": "user_joined",
+  "type": "user_joined_ws",
   "payload": {
     "username": "<joined_user's_name>",
     "role": "<joined_user's_role>"
   }
 }
 ```
-## User Leave
+## User Leave WebSocket
 ### Response
 ```json 
 {
-  "type": "user_left",
+  "type": "user_left_ws",
   "payload": {
     "username": "<left_user's_name>",
     "role": "<left_user's_role>"
+  }
+}
+```
+
+## User Join SFU
+### Response
+```json 
+{
+  "type": "user_joined_sfu",
+  "payload": {
+    "username": "<joined_user's_name>"
+  }
+}
+```
+## User Leave SFU
+### Response
+```json 
+{
+  "type": "user_left_sfu",
+  "payload": {
+    "username": "<left_user's_name>"
   }
 }
 ```

@@ -52,40 +52,42 @@ func HandleICECandidate(username string, payload json.RawMessage) {
 	}
 }
 
-func HandleJoinCall(username string, wsWriter common.WebSocketWriter) {
-	logger.Tracef("HandleJoinCall вызван для пользователя: %s", username)
+func HandleJoinCall(context common.ClientContext) {
+	logger.Tracef("HandleJoinCall вызван для пользователя: %s", context.GetUsername())
 	m := GetManager()
 
-	client, err := m.AddClient(username, wsWriter)
+	client, err := m.AddClient(context)
 	if err != nil {
 		logger.Errorf("Client adding error %v ", err)
 		return
 	}
 
-	err = client.WebSocket.WriteJSON(&common.Message{
+	responseBytes, err := json.Marshal(common.Message{
 		Type: common.MessageTypeJoinCallSuccess,
 	})
 	if err != nil {
 		logger.Errorf("HandleJoinCall error: %v", err)
 	}
+
+	client.Context.Send(responseBytes)
 }
 
-func HandleSDPOffer(username string, payload json.RawMessage) {
-	logger.Tracef("HandleWebRTCOffer вызван для пользователя: %s", username)
+func HandleSDPOffer(context common.ClientContext, payload json.RawMessage) {
+	logger.Tracef("HandleWebRTCOffer вызван для пользователя: %s", context.GetUsername())
 	m := GetManager()
 	m.mu.RLock()
-	client, ok := m.Clients[username]
+	client, ok := m.Clients[context.GetUsername()]
 	m.mu.RUnlock()
-	if !ok { /* ... */
+	if !ok {
 		return
 	}
 
 	var offer webrtc.SessionDescription
-	if err := json.Unmarshal(payload, &offer); err != nil { /* ... */
+	if err := json.Unmarshal(payload, &offer); err != nil {
 		return
 	}
 
-	if err := client.PeerConnection.SetRemoteDescription(offer); err != nil { /* ... */
+	if err := client.PeerConnection.SetRemoteDescription(offer); err != nil {
 		return
 	}
 
@@ -93,22 +95,26 @@ func HandleSDPOffer(username string, payload json.RawMessage) {
 	m.sendExistingTracksToClient(client)
 
 	answer, err := client.PeerConnection.CreateAnswer(nil)
-	if err != nil { /* ... */
+	if err != nil {
 		return
 	}
 
 	gatherComplete := webrtc.GatheringCompletePromise(client.PeerConnection)
-	if err := client.PeerConnection.SetLocalDescription(answer); err != nil { /* ... */
+	if err := client.PeerConnection.SetLocalDescription(answer); err != nil {
 		return
 	}
 	<-gatherComplete
 
 	// Отправляем Answer клиенту
 	payloadBytes, _ := json.Marshal(client.PeerConnection.LocalDescription())
-	client.WebSocket.WriteJSON(&common.Message{
+	answerBytes, err := json.Marshal(common.Message{
 		Type:    common.MessageTypeSdpAnswer,
 		Payload: payloadBytes,
 	})
+	if err != nil {
+		logger.Errorf("HandleSDPAnswer error: %v", err)
+	}
+	client.Context.Send(answerBytes)
 }
 
 func (manager *Manager) setupNegotiationHandler(client *Client) {
@@ -147,12 +153,14 @@ func (manager *Manager) setupNegotiationHandler(client *Client) {
 			logger.Errorf("Failed to marshal offer for %s: %v", client.Username, err)
 		}
 
-		if err := client.WebSocket.WriteJSON(&common.SignalingMessage{
+		offerBytes, err := json.Marshal(common.SignalingMessage{
 			Type:    common.MessageTypeSdpOffer,
 			Payload: offerPayload,
-		}); err != nil {
+		})
+		if err != nil {
 			logger.Errorf("Failed to send offer to %s: %v", client.Username, err)
 		}
+		client.Context.Send(offerBytes)
 	})
 }
 
@@ -167,7 +175,7 @@ func (m *Manager) sendExistingTracksToClient(newClient *Client) {
 	m.mu.RUnlock()
 }
 
-func GetSFUClients(wsWriter common.WebSocketWriter) {
+func GetSFUClients(context common.ClientContext) {
 	sfuManager := GetManager()
 
 	sfuManager.mu.RLock()
@@ -192,7 +200,12 @@ func GetSFUClients(wsWriter common.WebSocketWriter) {
 		Payload: activeClientsInfoBytes,
 	}
 
-	err = wsWriter.WriteJSON(clientsToSend)
+	clientsToSendBytes, err := json.Marshal(clientsToSend)
+	if err != nil {
+		logger.Errorf("Failed to marshal active clients: %v", err)
+	}
+
+	context.Send(clientsToSendBytes)
 	if err != nil {
 		logger.Errorf("Failed to send active clients: %v", err)
 	}

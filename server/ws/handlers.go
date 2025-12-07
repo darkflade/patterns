@@ -89,105 +89,7 @@ func HandleChat(client *Client, payload json.RawMessage) {
 
 }
 
-func GetWSClients(wsWriter common.WebSocketWriter) {
-	manager := GetManager()
-
-	manager.mu.RLock()
-	defer manager.mu.RUnlock()
-
-	activeClientsInfo := make([]common.ActiveClients, 0, len(manager.clients))
-
-	for client := range manager.clients {
-		activeClientsInfo = append(activeClientsInfo, common.ActiveClients{
-			Username: client.Username,
-			Role:     client.Role,
-		})
-	}
-
-	activeClientsInfoBytes, err := json.Marshal(activeClientsInfo)
-	if err != nil {
-		logger.Errorf("Error marshalling activeClientsInfo: %v", err)
-		return
-	}
-
-	clientsToSend := common.Message{
-		Type:    common.MessageTypeActiveClientsWSResponse,
-		Payload: activeClientsInfoBytes,
-	}
-
-	err = wsWriter.WriteJSON(clientsToSend)
-	if err != nil {
-		logger.Errorf("Failed to send active clients: %v", err)
-	}
-}
-
-func HandlePromoteUser(client *Client, payload json.RawMessage) {
-	if client.Role != "admin" {
-		sendSystemError(client, "У вас нет прав для выполнения этой команды.")
-		return
-	}
-
-	var promotePayload common.PromoteUserPayload
-	if err := json.Unmarshal(payload, &promotePayload); err != nil {
-		sendSystemError(client, "Некорректные данные для команды promote_user.")
-		return
-	}
-
-	if promotePayload.NewRole != "admin" && promotePayload.NewRole != "moderator" {
-		sendSystemError(client, "Можно назначить только роль 'admin' или 'moderator'.")
-		return
-	}
-
-	wsManager := GetManager()
-
-	wsManager.mu.Lock()
-	defer wsManager.mu.Unlock()
-
-	var targetClient *Client
-	for c := range wsManager.clients {
-		if c.Username == promotePayload.Username {
-			targetClient = c
-			break
-		}
-	}
-
-	if targetClient == nil {
-		sendSystemError(client, "Пользователь с таким именем не найден.")
-		return
-	}
-
-	targetClient.Role = promotePayload.NewRole
-	logger.Infof("Админ '%s' повысил '%s' до роли '%s'", client.Username, targetClient.Username, targetClient.Role)
-
-	db := database.GetDB()
-	database.UpdateUser(db, targetClient.Username, targetClient.Role)
-
-	go sendUpdatedUserListToAll()
-}
-
-func sendSystemError(client *Client, errorMessage string) {
-	errorPayload := map[string]string{"error": errorMessage}
-	payloadBytes, err := json.Marshal(errorPayload)
-	if err != nil {
-		logger.Errorf("Error marshalling errorMessage: %v", err)
-		return
-	}
-
-	errorMessageToSend := common.Message{
-		Type:    common.MessageTypeSystemError,
-		Payload: payloadBytes,
-	}
-
-	errorMessageToSendBytes, err := json.Marshal(errorMessageToSend)
-	if err != nil {
-		logger.Errorf("Error marshalling errorMessage: %v", err)
-		return
-	}
-
-	client.send <- errorMessageToSendBytes
-}
-
-func sendUpdatedUserListToAll() {
+func GetWSClients(context common.ClientContext) {
 	manager := GetManager()
 
 	manager.mu.RLock()
@@ -215,11 +117,108 @@ func sendUpdatedUserListToAll() {
 
 	clientsToSendBytes, err := json.Marshal(clientsToSend)
 	if err != nil {
-		logger.Errorf("Error marshalling clientsToSend: %v", err)
+		logger.Errorf("Error marshalling activeClientsInfo: %v", err)
+	}
+
+	context.Send(clientsToSendBytes)
+}
+
+func HandlePromoteUser(client *Client, payload json.RawMessage) {
+	if client.Role != "admin" {
+		sendSystemError(client, "У вас нет прав для выполнения этой команды.")
 		return
 	}
 
-	manager.broadcast <- clientsToSendBytes
+	var promotePayload common.PromoteUserPayload
+	if err := json.Unmarshal(payload, &promotePayload); err != nil {
+		sendSystemError(client, "Некорректные данные для команды promote_user.")
+		return
+	}
+
+	if promotePayload.NewRole != "admin" && promotePayload.NewRole != "moderator" && promotePayload.NewRole != "peasant" {
+		sendSystemError(client, "Можно назначить только роль 'admin' 'moderator' или 'peasant'.")
+		return
+	}
+
+	wsManager := GetManager()
+
+	wsManager.mu.Lock()
+	defer wsManager.mu.Unlock()
+
+	var targetClient *Client
+	for c := range wsManager.clients {
+		if c.Username == promotePayload.Username {
+			targetClient = c
+			break
+		}
+	}
+
+	if targetClient == nil {
+		sendSystemError(client, "Пользователь с таким именем не найден.")
+		return
+	}
+
+	targetClient.Role = promotePayload.NewRole
+	logger.Infof("Админ '%s' повысил '%s' до роли '%s'", client.Username, targetClient.Username, targetClient.Role)
+
+	db := database.GetDB()
+	database.UpdateUser(db, targetClient.Username, targetClient.Role)
+
+	go sendUpdatedUserToAll(promotePayload.Username, promotePayload.NewRole)
+}
+
+func sendSystemError(client *Client, errorMessage string) {
+	errorPayload := map[string]string{"error": errorMessage}
+	payloadBytes, err := json.Marshal(errorPayload)
+	if err != nil {
+		logger.Errorf("Error marshalling errorMessage: %v", err)
+		return
+	}
+
+	errorMessageToSend := common.Message{
+		Type:    common.MessageTypeSystemError,
+		Payload: payloadBytes,
+	}
+
+	errorMessageToSendBytes, err := json.Marshal(errorMessageToSend)
+	if err != nil {
+		logger.Errorf("Error marshalling errorMessage: %v", err)
+		return
+	}
+
+	client.send <- errorMessageToSendBytes
+}
+
+func sendUpdatedUserToAll(updatedClientUsername string, updatedClientRole string) {
+	logger.Debugf("Try send promoting %s :: %s", updatedClientUsername, updatedClientRole)
+	manager := GetManager()
+
+	manager.mu.RLock()
+	defer manager.mu.RUnlock()
+
+	updatedClientPayload := common.PromoteUserPayload{
+		Username: updatedClientUsername,
+		NewRole:  updatedClientRole,
+	}
+
+	updatedClientPayloadBytes, err := json.Marshal(updatedClientPayload)
+	if err != nil {
+		logger.Errorf("Error marshalling activeClientsInfo: %v", err)
+		return
+	}
+
+	clientToSend := common.Message{
+		Type:    common.MessageTypePromoteUserResponse,
+		Payload: updatedClientPayloadBytes,
+	}
+
+	clientToSendBytes, err := json.Marshal(clientToSend)
+	if err != nil {
+		logger.Errorf("Error marshalling clientToSend: %v", err)
+		return
+	}
+
+	manager.broadcast <- clientToSendBytes
 }
 
 func HandleJoinUserResponse(username string, role string) {
@@ -236,7 +235,7 @@ func HandleJoinUserResponse(username string, role string) {
 	}
 
 	joinUserNotificationMessage := common.Message{
-		Type:    common.MessageTypeUserJoinResponse,
+		Type:    common.MessageTypeUserJoinWS,
 		Payload: joinPayloadBytes,
 	}
 
@@ -262,7 +261,32 @@ func HandleLeaveUserResponse(username string, role string) {
 	}
 
 	joinUserNotificationMessage := common.Message{
-		Type:    common.MessageTypeUserLeaveResponse,
+		Type:    common.MessageTypeUserLeaveWS,
+		Payload: joinPayloadBytes,
+	}
+
+	joinUserNotificationMessageBytes, err := json.Marshal(joinUserNotificationMessage)
+	if err != nil {
+		logger.Errorf("Error marshalling joinUserNotificationMessage: %v", err)
+	}
+
+	wsManager.broadcast <- joinUserNotificationMessageBytes
+}
+
+func HandleSFUEventResponse(username string, eventType string) {
+	wsManager := GetManager()
+
+	joinPayload := map[string]string{
+		"username": username,
+	}
+
+	joinPayloadBytes, err := json.Marshal(joinPayload)
+	if err != nil {
+		logger.Errorf("Error marshalling joinPayload: %v", err)
+	}
+
+	joinUserNotificationMessage := common.Message{
+		Type:    eventType,
 		Payload: joinPayloadBytes,
 	}
 

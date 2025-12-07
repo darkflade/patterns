@@ -9,12 +9,15 @@ const (
 	MessageTypeActiveClientsWSResponse  = "active_clients_ws_response"
 	MessageTypeActiveClientsSFUResponse = "active_clients_sfu_response"
 	MessageTypePromoteUser              = "promote_user"
+	MessageTypePromoteUserResponse      = "promote_user_response"
 
 	// System Messages
-	MessageTypeSystem            = "system_message"
-	MessageTypeSystemError       = "system_error_message"
-	MessageTypeUserJoinResponse  = "user_joined"
-	MessageTypeUserLeaveResponse = "user_left"
+	MessageTypeSystem       = "system_message"
+	MessageTypeSystemError  = "system_error_message"
+	MessageTypeUserJoinWS   = "user_joined_ws"
+	MessageTypeUserLeaveWS  = "user_left_ws"
+	MessageTypeUserJoinSFU  = "user_joined_sfu"
+	MessageTypeUserLeaveSFU = "user_left_sfu"
 
 	// webrtc guys
 	// Custom
@@ -25,6 +28,10 @@ const (
 	MessageTypeSdpAnswer    = "sdp_answer"
 	MessageTypeIceCandidate = "ice_candidate"
 )
+
+type MessageSender interface {
+	Send(message []byte)
+}
 
 type Message struct {
 	Type    string          `json:"type"`
@@ -51,10 +58,6 @@ type SdpPayload struct {
 
 type IceCandidatePayload struct {
 	Candidate map[string]interface{} `json:"candidate"`
-}
-
-type WebSocketWriter interface {
-	WriteJSON(v interface{}) error
 }
 
 type SignalingMessage struct {

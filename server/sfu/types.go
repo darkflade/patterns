@@ -16,6 +16,11 @@ type Manager struct {
 type Client struct {
 	Username       string
 	PeerConnection *webrtc.PeerConnection
-	WebSocket      common.WebSocketWriter
+	Context        common.ClientContext
 	mu             sync.RWMutex
+}
+
+type Event struct {
+	InitiatorUsername string
+	Type              string
 }

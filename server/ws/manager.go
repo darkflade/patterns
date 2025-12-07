@@ -49,14 +49,22 @@ func (manager *Manager) Run() {
 					delete(manager.clients, client)
 				}
 			}
+		case event := <-sfu.EventsChannel:
+			switch event.Type {
+			case common.MessageTypeUserJoinSFU:
+				go HandleSFUEventResponse(event.InitiatorUsername, event.Type)
+			case common.MessageTypeUserLeaveSFU:
+				go HandleSFUEventResponse(event.InitiatorUsername, event.Type)
+			default:
+				logger.Warnf("Unknown sfu event type %d", event.Type)
+			}
 		}
+
 	}
 }
 
-// TODO Rewrite logs
 func (c *Client) readPump() {
 	defer func() {
-		logger.Debugf("--- 🛑 readPump для %s ЗАВЕРШЕН ---", c.Username)
 		c.manager.unregister <- c
 		sfu.GetManager().RemoveClient(c.Username)
 		err := c.conn.Close()
@@ -65,21 +73,17 @@ func (c *Client) readPump() {
 		}
 	}()
 
-	logger.Debugf("--- ▶️ readPump для %s ЗАПУЩЕН ---", c.Username)
-
 	for {
 		_, messagePayload, err := c.conn.ReadMessage()
 		if err != nil {
-			logger.Errorf("ОШИБКА в c.conn.ReadMessage() для %s: %v", c.Username, err)
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				logger.Errorf("   (это была НЕОЖИДАННАЯ ошибка закрытия)")
+				logger.Errorf("Unexpected ws close for %s", c.Username)
 			} else {
-				logger.Debug("   (это было ОЖИДАЕМОЕ закрытие соединения, например, клиент закрыл вкладку)")
+				logger.Infof("WS was closed for %s", c.Username)
 			}
 			break
 		}
 
-		logger.Debugf("📥 Получено сообщение от %s: %s", c.Username, string(messagePayload))
 		var message common.Message
 		err = json.Unmarshal(messagePayload, &message)
 		if err != nil {
@@ -93,17 +97,17 @@ func (c *Client) readPump() {
 		case common.MessageTypeChat:
 			HandleChat(c, message.Payload)
 		case common.MessageTypeJoinCall:
-			sfu.HandleJoinCall(c.Username, c.conn)
+			sfu.HandleJoinCall(c)
 		case common.MessageTypeIceCandidate:
 			sfu.HandleICECandidate(c.Username, message.Payload)
 		case common.MessageTypeSdpAnswer:
 			sfu.HandleSDPAnswer(c.Username, message.Payload)
 		case common.MessageTypeSdpOffer:
-			sfu.HandleSDPOffer(c.Username, message.Payload)
+			sfu.HandleSDPOffer(c, message.Payload)
 		case common.MessageTypeActiveClientsWS:
-			GetWSClients(c.conn)
+			GetWSClients(c)
 		case common.MessageTypeActiveClientsSFU:
-			sfu.GetSFUClients(c.conn)
+			sfu.GetSFUClients(c)
 		case common.MessageTypePromoteUser:
 			HandlePromoteUser(c, message.Payload)
 		default:
