@@ -67,12 +67,23 @@ func (m *Manager) RemoveClient(username string) {
 	defer m.mu.Unlock()
 
 	client, ok := m.Clients[username]
-	if ok {
-		client.PeerConnection.Close()
-		delete(m.Clients, username)
-		EventsChannel <- Event{InitiatorUsername: username, Type: common.MessageTypeUserLeaveSFU}
-		logger.Infof("Клиент '%s' удален.", username)
+	if !ok {
+		return
 	}
+
+	if len(client.TrackIDs) > 0 {
+		logger.Infof("Удаляем %d треков от клиента %s", len(client.TrackIDs), username)
+		for _, trackID := range client.TrackIDs {
+			delete(m.TrackLocals, trackID)
+		}
+	}
+
+	client.PeerConnection.Close()
+	delete(m.Clients, username)
+
+	EventsChannel <- Event{InitiatorUsername: username, Type: common.MessageTypeUserLeaveSFU}
+	logger.Infof("Клиент '%s' удален из SFU.", username)
+
 }
 
 func (manager *Manager) setupPeerConnectionHandlers(client *Client) {
@@ -114,10 +125,13 @@ func (manager *Manager) setupPeerConnectionHandlers(client *Client) {
 		logger.Infof("Получен track от '%s'! Тип: %s", client.Username, remoteTrack.Kind())
 
 		localTrack, newTrackErr := webrtc.NewTrackLocalStaticRTP(remoteTrack.Codec().RTPCodecCapability, remoteTrack.ID(), remoteTrack.StreamID())
-
 		if newTrackErr != nil {
 			logger.Errorf("Не удалось создать локальный трек: %v", newTrackErr)
 		}
+
+		client.mu.Lock()
+		client.TrackIDs = append(client.TrackIDs, remoteTrack.ID())
+		client.mu.Unlock()
 
 		manager.mu.Lock()
 		manager.TrackLocals[remoteTrack.ID()] = localTrack

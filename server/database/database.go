@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 	"sync"
 
@@ -29,7 +30,8 @@ func InitDB(dataSourceName string) (*sql.DB, error) {
 		createTableSQL := `CREATE TABLE IF NOT EXISTS users (
 			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,		
 			"username" TEXT NOT NULL UNIQUE,
-			"role" TEXT NOT NULL
+			"role" TEXT NOT NULL,
+			"password" TEXT NOT NULL
 		  );`
 
 		_, err = db.Exec(createTableSQL)
@@ -38,12 +40,27 @@ func InitDB(dataSourceName string) (*sql.DB, error) {
 			return
 		}
 
-		addUser := `INSERT INTO users (username,role) VALUES (?,?);`
+		addUser := `INSERT INTO users (username,role,password) VALUES (?,?,?);`
 
-		db.Exec(addUser, "admin", "admin")
-		db.Exec(addUser, "moderator", "moderator")
-		db.Exec(addUser, "peasant", "peasant")
+		db.Exec(addUser, "admin", "admin", "admin")
+		db.Exec(addUser, "moderator", "moderator", "moderator")
+		db.Exec(addUser, "peasant", "peasant", "peasant")
 		logger.Info("Database successfully initialized")
+
+		createMessagesTableSQL := `CREATE TABLE IF NOT EXISTS messages (
+			"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+			"sender" TEXT NOT NULL,
+			"role" TEXT NOT NULL,
+			"type" TEXT NOT NULL DEFAULT 'text',
+			"content" TEXT NOT NULL,
+			"timestamp" DATETIME DEFAULT CURRENT_TIMESTAMP
+		);`
+
+		_, err = db.Exec(createMessagesTableSQL)
+		if err != nil {
+			logger.Errorf("Failed to create table messages: %v", err)
+			return
+		}
 	})
 
 	if err != nil {
@@ -60,14 +77,15 @@ func GetDB() *sql.DB {
 	return db
 }
 
-func CreateUser(db *sql.DB, username string) (string, error) {
+func CreateUser(db *sql.DB, username string, password string) (string, error) {
 	var role string
+	var passwordDB string
 
-	err := db.QueryRow("SELECT role FROM users WHERE username = ?", username).Scan(&role)
+	err := db.QueryRow("SELECT role, password FROM users WHERE username = ?", username).Scan(&role, &passwordDB)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			role = "peasant"
-			_, insertErr := db.Exec("INSERT INTO users (username, role) VALUES (?, ?)", username, role)
+			_, insertErr := db.Exec("INSERT INTO users (username, role, password) VALUES (?, ?, ?)", username, role, password)
 			if insertErr != nil {
 				logger.Errorf("Не удалось создать нового пользователя %s: %v", username, insertErr)
 				return "", insertErr
@@ -77,6 +95,11 @@ func CreateUser(db *sql.DB, username string) (string, error) {
 			return "", err
 		}
 	}
+
+	if password != passwordDB {
+		return "", errors.New("incorrect password")
+	}
+
 	return role, nil
 }
 

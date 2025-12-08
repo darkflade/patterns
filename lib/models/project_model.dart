@@ -1,15 +1,22 @@
 class ChatMessage {
   final String sender;
   final String role;
-  final String text;
+  final String type;
+  final String content;
 
-  ChatMessage({required this.sender, required this.role, required this.text});
+  ChatMessage({
+    required this.sender,
+    required this.role,
+    required this.type,
+    required this.content,
+  });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     return ChatMessage(
       sender: json['sender'] as String,
       role: json['role'] as String,
-      text: json['text'] as String,
+      type: json['type'] as String? ?? 'text',
+      content: json['content'] as String? ?? (json['text'] as String? ?? ''),
     );
   }
 }

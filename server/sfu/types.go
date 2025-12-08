@@ -17,6 +17,7 @@ type Client struct {
 	Username       string
 	PeerConnection *webrtc.PeerConnection
 	Context        common.ClientContext
+	TrackIDs       []string
 	mu             sync.RWMutex
 }
 

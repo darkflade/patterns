@@ -10,18 +10,20 @@ class ProjectLoginScreen extends StatefulWidget {
 
 class _ProjectLoginScreenState extends State<ProjectLoginScreen> {
   final _nickController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _ipController = TextEditingController(text: "192.168.1.4:8080");
 
   void _enterChat() {
     final nick = _nickController.text.trim();
+    final password = _passwordController.text.trim();
     final ip = _ipController.text.trim();
 
-    if (nick.isEmpty || ip.isEmpty) return;
+    if (nick.isEmpty || ip.isEmpty || password.isEmpty) return;
 
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ProjectScreen(title: "Чат ($nick@$ip)", ip: ip, username: nick),
+        builder: (_) => ProjectScreen(title: "Чат ($nick@$ip)", ip: ip, username: nick, password: password),
       ),
     );
   }
@@ -40,6 +42,15 @@ class _ProjectLoginScreenState extends State<ProjectLoginScreen> {
                 labelText: "Введите ник",
                 border: OutlineInputBorder(),
               ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(
+                labelText: "Введите пароль",
+                border: OutlineInputBorder(),
+              ),
+              obscureText: true,
             ),
             const SizedBox(height: 16),
             TextField(

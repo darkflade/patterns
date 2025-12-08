@@ -6,8 +6,25 @@ import (
 	"net"
 	"net/http"
 	"server/database"
+	"server/files"
 	"server/ws"
 )
+
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
 
 func printLocalIPs(port string) {
 	ifaces, err := net.Interfaces()
@@ -49,6 +66,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("For some reason failed init database: %v", err)
 	}
+
+	fs := withCORS(http.FileServer(http.Dir("./uploads")))
+	http.Handle("/files/", withCORS(http.StripPrefix("/files/", fs)))
+	http.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
+		withCORS(http.HandlerFunc(files.HandleFileUpload)).ServeHTTP(w, r)
+	})
 
 	// HTTP Server
 	http.HandleFunc("/ws", ws.HandleWS)

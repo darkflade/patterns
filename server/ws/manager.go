@@ -96,6 +96,8 @@ func (c *Client) readPump() {
 		switch message.Type {
 		case common.MessageTypeChat:
 			HandleChat(c, message.Payload)
+		case common.MessageTypeGetMessagesRequest:
+			HandleGetMessages(c, message.Payload)
 		case common.MessageTypeJoinCall:
 			sfu.HandleJoinCall(c)
 		case common.MessageTypeIceCandidate:
@@ -110,6 +112,8 @@ func (c *Client) readPump() {
 			sfu.GetSFUClients(c)
 		case common.MessageTypePromoteUser:
 			HandlePromoteUser(c, message.Payload)
+		case common.MessageTypeLeaveCall:
+			sfu.GetManager().RemoveClient(c.Username)
 		default:
 			logger.Errorf("Unknown message type: %s\n Content %v", message.Type, messagePayload)
 		}

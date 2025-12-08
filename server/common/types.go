@@ -10,6 +10,8 @@ const (
 	MessageTypeActiveClientsSFUResponse = "active_clients_sfu_response"
 	MessageTypePromoteUser              = "promote_user"
 	MessageTypePromoteUserResponse      = "promote_user_response"
+	MessageTypeGetMessagesRequest       = "get_messages_request"
+	MessageTypeGetMessagesResponse      = "get_messages_response"
 
 	// System Messages
 	MessageTypeSystem       = "system_message"
@@ -27,6 +29,7 @@ const (
 	MessageTypeSdpOffer     = "sdp_offer"
 	MessageTypeSdpAnswer    = "sdp_answer"
 	MessageTypeIceCandidate = "ice_candidate"
+	MessageTypeLeaveCall    = "leave_call"
 )
 
 type MessageSender interface {
@@ -39,13 +42,19 @@ type Message struct {
 }
 
 type ClientChatPayload struct {
-	Text string `json:"text"`
+	Type    string `json:"type"`
+	Content string `json:"content"`
+}
+
+type GetMessagesPayload struct {
+	Limit int `json:"limit"`
 }
 
 type ServerChatPayload struct {
-	Sender string `json:"sender"`
-	Role   string `json:"role"`
-	Text   string `json:"text"`
+	Sender  string `json:"sender"`
+	Role    string `json:"role"`
+	Type    string `json:"type"`
+	Content string `json:"content"`
 }
 type PromoteUserPayload struct {
 	Username string `json:"username"`

@@ -15,6 +15,7 @@ var upgrader = websocket.Upgrader{
 
 func HandleWS(w http.ResponseWriter, r *http.Request) {
 	username := r.URL.Query().Get("username")
+	password := r.URL.Query().Get("password")
 
 	logger.Tracef("%s try to connect", username)
 
@@ -23,11 +24,16 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if password == "" {
+		logger.Warn("No pass provided")
+		return
+	}
+
 	db := database.GetDB()
 
-	role, err := database.CreateUser(db, username)
+	role, err := database.CreateUser(db, username, password)
 	if err != nil {
-		logger.Error("Failed to create user")
+		http.Error(w, "Authentication failed", http.StatusUnauthorized)
 		return
 	}
 
@@ -54,6 +60,53 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func HandleGetMessages(client *Client, payload json.RawMessage) {
+	logger.Tracef("Клиент %s запросил историю сообщений", client.Username)
+
+	var requestPayload common.GetMessagesPayload
+	requestPayload.Limit = 50
+
+	if payload != nil {
+		if err := json.Unmarshal(payload, &requestPayload); err != nil {
+			logger.Warnf("Не удалось распарсить payload для get_messages_request: %v. Используем лимит по умолчанию.", err)
+		}
+	}
+
+	if requestPayload.Limit <= 0 || requestPayload.Limit > 200 {
+		logger.Warnf("Клиент %s запросил некорректный лимит %d. Устанавливаем лимит 50.", client.Username, requestPayload.Limit)
+		requestPayload.Limit = 50
+	}
+
+	db := database.GetDB()
+	messages, err := database.GetLastMessages(db, requestPayload.Limit)
+	if err != nil {
+		logger.Errorf("Не удалось получить сообщения из БД: %v", err)
+		sendSystemError(client, "Не удалось загрузить историю сообщений.")
+		return
+	}
+
+	payloadBytes, err := json.Marshal(messages)
+	if err != nil {
+		logger.Errorf("Не удалось упаковать payload с сообщениями: %v", err)
+		return
+	}
+
+	responseMsg := common.Message{
+		Type:    common.MessageTypeGetMessagesResponse,
+		Payload: payloadBytes,
+	}
+
+	responseBytes, err := json.Marshal(responseMsg)
+	if err != nil {
+		logger.Errorf("Не удалось упаковать финальное сообщение с историей: %v", err)
+		return
+	}
+
+	client.send <- responseBytes
+
+	logger.Tracef("Отправлено %d сообщений из истории клиенту %s", len(messages), client.Username)
+}
+
 func HandleChat(client *Client, payload json.RawMessage) {
 	var clientPayload common.ClientChatPayload
 	err := json.Unmarshal(payload, &clientPayload)
@@ -63,9 +116,10 @@ func HandleChat(client *Client, payload json.RawMessage) {
 	}
 
 	serverPayload := common.ServerChatPayload{
-		Sender: client.Username,
-		Role:   client.Role,
-		Text:   clientPayload.Text,
+		Sender:  client.Username,
+		Role:    client.Role,
+		Type:    clientPayload.Type,
+		Content: clientPayload.Content,
 	}
 
 	serverPayloadBytes, err := json.Marshal(serverPayload)
@@ -73,6 +127,13 @@ func HandleChat(client *Client, payload json.RawMessage) {
 		logger.Errorf("Error marshalling serverPayload: %v", err)
 		return
 	}
+
+	go func() {
+		db := database.GetDB()
+		if err := database.InsertMessage(db, serverPayload.Sender, serverPayload.Role, serverPayload.Type, serverPayload.Content); err != nil {
+			logger.Errorf("Не удалось сохранить сообщение в БД: %v", err)
+		}
+	}()
 
 	broadcastMessage := common.Message{
 		Type:    common.MessageTypeChat,
